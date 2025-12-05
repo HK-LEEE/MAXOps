@@ -71,13 +71,14 @@ services:
     ports:
       - "9001:80"
     environment:
-      # 호스트 설정
-      OPENPROJECT_HOST__NAME: ${OPENPROJECT_HOST:-172.168.30.21:9001}
+      # 호스트 설정 - 모든 호스트 허용
+      OPENPROJECT_HOST__NAME: 172.168.30.207:9001
       OPENPROJECT_SECRET_KEY_BASE: ${OPENPROJECT_SECRET:-your_secret_key_base_here_min_64_chars_required_change_this}
       OPENPROJECT_HTTPS: "false"
 
-      # 외부 IP 접근 허용 (모든 호스트)
-      OPENPROJECT_RAILS__RELATIVE__URL__ROOT: ""
+      # 호스트 검증 완전 비활성화
+      RAILS_DEVELOPMENT_HOSTS: ".localhost,localhost,[::1],172.168.30.207,172.22.166.206"
+      OPENPROJECT_SKIP__HOSTNAME__VALIDATION: "true"
 
       # PostgreSQL 설정
       DATABASE_URL: "postgres://${POSTGRES_USER:-maxops}:${POSTGRES_PASSWORD:-maxops_secure_password}@postgres:5432/openproject"
@@ -123,10 +124,10 @@ services:
       GITEA__DEFAULT__RUN_MODE: prod
 
       # 서버 설정
-      GITEA__server__DOMAIN: ${GITEA_DOMAIN:-172.168.30.21}
-      GITEA__server__SSH_DOMAIN: ${GITEA_SSH_DOMAIN:-172.168.30.21}
+      GITEA__server__DOMAIN: ${GITEA_DOMAIN:-172.168.30.207}
+      GITEA__server__SSH_DOMAIN: ${GITEA_SSH_DOMAIN:-172.168.30.207}
       GITEA__server__HTTP_PORT: 3000
-      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://172.168.30.21:9002/}
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://172.168.30.207:9002/}
       GITEA__server__SSH_PORT: 9022
       GITEA__server__SSH_LISTEN_PORT: 22
       GITEA__server__LFS_START_SERVER: "true"

@@ -1,0 +1,12 @@
+# 데이터 폴더 (볼륨 데이터)
+data/
+
+# 환경 변수 파일
+.env
+
+# 로그 파일
+*.log
+
+# OS 파일
+.DS_Store
+Thumbs.db

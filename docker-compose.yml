@@ -1,0 +1,294 @@
+# OpenProject + Gitea 통합 프로젝트 관리 시스템
+# Docker Compose 설정 파일
+# 모든 서비스는 9000번대 포트 사용
+
+# ============================================
+# 네트워크 설정
+# Docker가 자동으로 서브넷 할당
+# ============================================
+networks:
+  maxops-network:
+    driver: bridge
+
+# ============================================
+# 볼륨 설정 (프로젝트 폴더 내 data/ 디렉토리에 저장)
+# ============================================
+
+# ============================================
+# 서비스 정의
+# ============================================
+services:
+
+  # ------------------------------------------
+  # PostgreSQL 데이터베이스 (통합 DB)
+  # ------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: maxops-postgres
+    restart: unless-stopped
+    ports:
+      - "9003:5432"
+    environment:
+      # 기본 설정
+      POSTGRES_USER: ${POSTGRES_USER:-maxops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maxops_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-openproject}
+      # 타임존 설정
+      TZ: Asia/Seoul
+    volumes:
+      # 데이터 영속성 (로컬 폴더)
+      - ./data/postgres:/var/lib/postgresql/data
+      # 초기화 스크립트
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - maxops-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maxops} -d openproject"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.maxops.service=database"
+      - "com.maxops.description=PostgreSQL 통합 데이터베이스"
+
+  # ------------------------------------------
+  # Redis 캐시 서버
+  # ------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: maxops-redis
+    restart: unless-stopped
+    ports:
+      - "9004:6379"
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - ./data/redis:/data
+    # 기본 설정으로 실행 (영속성 활성화)
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    networks:
+      - maxops-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.maxops.service=cache"
+      - "com.maxops.description=Redis 캐시 서버"
+
+  # ------------------------------------------
+  # OpenProject (프로젝트/일정/Task/문서 관리)
+  # ------------------------------------------
+  openproject:
+    image: openproject/openproject:14
+    container_name: maxops-openproject
+    restart: unless-stopped
+    ports:
+      - "9001:80"
+    environment:
+      # 데이터베이스 연결
+      OPENPROJECT_HOST__NAME: ${OPENPROJECT_HOST:-localhost:9001}
+      OPENPROJECT_SECRET_KEY_BASE: ${OPENPROJECT_SECRET:-your_secret_key_base_here_min_64_chars_required}
+      OPENPROJECT_HTTPS: ${OPENPROJECT_HTTPS:-false}
+
+      # PostgreSQL 설정
+      DATABASE_URL: "postgres://${POSTGRES_USER:-maxops}:${POSTGRES_PASSWORD:-maxops_secure_password}@postgres:5432/openproject"
+
+      # 이메일 설정
+      OPENPROJECT_EMAIL__DELIVERY__METHOD: smtp
+      OPENPROJECT_SMTP__ADDRESS: ${SMTP_HOST:-smtp.gmail.com}
+      OPENPROJECT_SMTP__PORT: ${SMTP_PORT:-587}
+      OPENPROJECT_SMTP__DOMAIN: ${SMTP_DOMAIN:-gmail.com}
+      OPENPROJECT_SMTP__AUTHENTICATION: plain
+      OPENPROJECT_SMTP__USER__NAME: ${SMTP_USER:-}
+      OPENPROJECT_SMTP__PASSWORD: ${SMTP_PASSWORD:-}
+
+      # 한국어 기본 설정
+      OPENPROJECT_DEFAULT__LANGUAGE: ko
+
+      # 타임존
+      TZ: Asia/Seoul
+
+      # 성능 설정
+      OPENPROJECT_WEB_WORKERS: 2
+      OPENPROJECT_WEB_TIMEOUT: 300
+    volumes:
+      - ./data/openproject/data:/var/openproject/pgdata
+      - ./data/openproject/assets:/var/openproject/assets
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - maxops-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health_checks/default"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    labels:
+      - "com.maxops.service=project-management"
+      - "com.maxops.description=OpenProject 프로젝트 관리"
+
+  # ------------------------------------------
+  # Gitea (Git 저장소/CI-CD)
+  # ------------------------------------------
+  gitea:
+    image: gitea/gitea:1.21-rootless
+    container_name: maxops-gitea
+    restart: unless-stopped
+    ports:
+      - "9002:3000"
+      - "9022:22"
+    environment:
+      # 기본 설정
+      GITEA__DEFAULT__APP_NAME: "MaxOps Git"
+      GITEA__DEFAULT__RUN_USER: git
+      GITEA__DEFAULT__RUN_MODE: prod
+
+      # 서버 설정
+      GITEA__server__DOMAIN: ${GITEA_DOMAIN:-localhost}
+      GITEA__server__SSH_DOMAIN: ${GITEA_SSH_DOMAIN:-localhost}
+      GITEA__server__HTTP_PORT: 3000
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://localhost:9002/}
+      GITEA__server__SSH_PORT: 22
+      GITEA__server__SSH_LISTEN_PORT: 22
+      GITEA__server__LFS_START_SERVER: "true"
+
+      # 데이터베이스 설정
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: postgres:5432
+      GITEA__database__NAME: gitea
+      GITEA__database__USER: ${POSTGRES_USER:-maxops}
+      GITEA__database__PASSWD: ${POSTGRES_PASSWORD:-maxops_secure_password}
+
+      # 캐시 설정
+      GITEA__cache__ENABLED: "true"
+      GITEA__cache__ADAPTER: redis
+      GITEA__cache__HOST: "redis://redis:6379/0"
+
+      # 세션 설정
+      GITEA__session__PROVIDER: redis
+      GITEA__session__PROVIDER_CONFIG: "redis://redis:6379/1"
+
+      # 큐 설정 (Gitea Actions용)
+      GITEA__queue__TYPE: redis
+      GITEA__queue__CONN_STR: "redis://redis:6379/2"
+
+      # Actions 설정 (CI/CD)
+      GITEA__actions__ENABLED: "true"
+      GITEA__actions__DEFAULT_ACTIONS_URL: "https://github.com"
+
+      # 한국어 설정
+      GITEA__i18n__LANGS: "ko-KR,en-US"
+      GITEA__i18n__NAMES: "한국어,English"
+
+      # 타임존
+      TZ: Asia/Seoul
+
+      # 보안 설정
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__security__SECRET_KEY: ${GITEA_SECRET_KEY:-your_gitea_secret_key_here}
+      GITEA__security__INTERNAL_TOKEN: ${GITEA_INTERNAL_TOKEN:-your_internal_token_here}
+
+      # Webhook 설정 (OpenProject 연동용)
+      GITEA__webhook__ALLOWED_HOST_LIST: "*"
+    volumes:
+      - ./data/gitea/data:/var/lib/gitea
+      - ./data/gitea/config:/etc/gitea
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - maxops-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    labels:
+      - "com.maxops.service=git-repository"
+      - "com.maxops.description=Gitea Git 저장소"
+
+  # ------------------------------------------
+  # Gitea Act Runner (CI/CD 실행기)
+  # ------------------------------------------
+  gitea-runner:
+    image: gitea/act_runner:latest
+    container_name: maxops-gitea-runner
+    restart: unless-stopped
+    environment:
+      CONFIG_FILE: /config/config.yaml
+      GITEA_INSTANCE_URL: http://gitea:3000
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_TOKEN:-}
+      GITEA_RUNNER_NAME: maxops-runner-1
+      GITEA_RUNNER_LABELS: "ubuntu-latest:docker://node:18-alpine,linux:docker://ubuntu:22.04"
+      TZ: Asia/Seoul
+    volumes:
+      - ./docker/gitea-runner/config.yaml:/config/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - gitea
+    networks:
+      - maxops-network
+    labels:
+      - "com.maxops.service=ci-runner"
+      - "com.maxops.description=Gitea Actions Runner"
+
+  # ------------------------------------------
+  # Nginx 리버스 프록시
+  # ------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: maxops-nginx
+    restart: unless-stopped
+    ports:
+      - "9000:80"
+      - "9443:443"
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - openproject
+      - gitea
+    networks:
+      - maxops-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.maxops.service=proxy"
+      - "com.maxops.description=Nginx 리버스 프록시"
+
+  # ------------------------------------------
+  # 백업 서비스
+  # ------------------------------------------
+  backup:
+    image: postgres:15-alpine
+    container_name: maxops-backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-maxops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maxops_secure_password}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-maxops_secure_password}
+      TZ: Asia/Seoul
+    volumes:
+      - ./data/backup:/backup
+      - ./docker/backup/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["crond -f -l 2"]
+    depends_on:
+      - postgres
+    networks:
+      - maxops-network
+    labels:
+      - "com.maxops.service=backup"
+      - "com.maxops.description=자동 백업 서비스"

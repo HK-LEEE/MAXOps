@@ -1,0 +1,113 @@
+# ============================================
+# Gitea Act Runner 설정 파일
+# CI/CD 작업 실행을 위한 설정
+# ============================================
+
+# ------------------------------------------
+# 로그 설정
+# ------------------------------------------
+log:
+  # 로그 레벨: trace, debug, info, warn, error, fatal
+  level: info
+
+# ------------------------------------------
+# Runner 기본 설정
+# ------------------------------------------
+runner:
+  # Runner 등록 파일 경로
+  file: /data/.runner
+
+  # 동시 실행 가능한 작업 수
+  capacity: 2
+
+  # 환경 변수
+  envs:
+    # 한국 표준시 설정
+    TZ: Asia/Seoul
+    # 언어 설정
+    LANG: ko_KR.UTF-8
+
+  # 작업 환경 타임아웃 (초)
+  env_file: ""
+
+  # 작업 타임아웃 (기본: 3시간)
+  timeout: 3h
+
+  # 사전 정의된 변수 파일 비활성화
+  insecure: false
+
+  # 작업 가져오기 간격
+  fetch_timeout: 5s
+
+  # 작업 가져오기 간격
+  fetch_interval: 2s
+
+  # 레이블 (실행 환경 정의)
+  labels:
+    - "ubuntu-latest:docker://ubuntu:22.04"
+    - "ubuntu-22.04:docker://ubuntu:22.04"
+    - "ubuntu-20.04:docker://ubuntu:20.04"
+    - "node-18:docker://node:18-alpine"
+    - "node-20:docker://node:20-alpine"
+    - "python-3.11:docker://python:3.11-slim"
+    - "python-3.12:docker://python:3.12-slim"
+    - "go-1.21:docker://golang:1.21-alpine"
+    - "rust-latest:docker://rust:latest"
+
+# ------------------------------------------
+# 캐시 설정
+# ------------------------------------------
+cache:
+  # 캐시 활성화
+  enabled: true
+
+  # 캐시 디렉토리
+  dir: /data/cache
+
+  # 호스트 (외부 캐시 서버)
+  host: ""
+
+  # 포트
+  port: 0
+
+  # 외부 서버 사용 여부
+  external_server: ""
+
+# ------------------------------------------
+# 컨테이너 설정
+# ------------------------------------------
+container:
+  # 네트워크 모드
+  network: "bridge"
+
+  # 특권 모드 비활성화 (보안)
+  privileged: false
+
+  # Docker 옵션
+  options: ""
+
+  # 작업 디렉토리
+  workdir_parent: /workspace
+
+  # 유효한 볼륨
+  valid_volumes:
+    - "/data/cache"
+
+  # Docker 호스트
+  docker_host: ""
+
+  # 강제 풀 비활성화
+  force_pull: false
+
+# ------------------------------------------
+# 호스트 설정
+# ------------------------------------------
+host:
+  # 작업 디렉토리
+  workdir_parent: /data/workdir
+
+# ------------------------------------------
+# 보안 설정
+# ------------------------------------------
+# Runner 실행 시 사용할 그룹
+# docker 그룹에 접근 권한 필요

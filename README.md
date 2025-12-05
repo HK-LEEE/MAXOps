@@ -29,3 +29,19 @@ docker compose exec postgres psql -U maxops -d openproject -c "CREATE DATABASE g
 그 후 Gitea 재시작:
 
 docker compose restart gitea
+
+둘 다 재시작하세요:
+
+docker compose restart openproject gitea
+
+또는 .env 파일로 관리하려면:
+
+# .env 파일에 추가
+
+OPENPROJECT_HOST=172.168.30.21:9001
+GITEA_DOMAIN=172.168.30.21
+GITEA_SSH_DOMAIN=172.168.30.21
+GITEA_ROOT_URL=http://172.168.30.21:9002/
+
+그 후:
+docker compose up -d
